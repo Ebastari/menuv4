@@ -1,8 +1,8 @@
-
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { TermsContent } from './TermsContent';
 
-const GOOGLE_CLIENT_ID = "357045986446-03056acv0ggnrhv7irv1dtk3b0fn5vmf.apps.googleusercontent.com";
+// Prefer setting this in your env (Vite: VITE_GOOGLE_CLIENT_ID)
+const GOOGLE_CLIENT_ID = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || "357045986446-03056acv0ggnrhv7irv1dtk3b0fn5vmf.apps.googleusercontent.com";
 
 export async function secureHash(message: string): Promise<string> {
   const msgUint8 = new TextEncoder().encode(message);
@@ -16,9 +16,14 @@ function parseJwt(token: string) {
   try {
     const base64Url = token.split('.')[1];
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
-      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-    }).join(''));
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(function (c) {
+          return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        })
+        .join('')
+    );
     return JSON.parse(jsonPayload);
   } catch (e) {
     return null;
@@ -26,67 +31,85 @@ function parseJwt(token: string) {
 }
 
 interface LoginProps {
-  onVerified: (userData: { name: string; photo: string; telepon: string; email: string; jabatan: string; facePhoto?: string; gpsLat?: number; gpsLon?: number; gpsAcc?: number }, role: 'admin' | 'guest') => void;
+  onVerified: (
+    userData: {
+      name: string;
+      photo: string;
+      telepon: string;
+      email: string;
+      jabatan: string;
+      facePhoto?: string;
+      gpsLat?: number;
+      gpsLon?: number;
+      gpsAcc?: number;
+    },
+    role: 'admin' | 'guest'
+  ) => void;
   onClose: () => void;
 }
 
 export const Login: React.FC<LoginProps> = ({ onVerified, onClose }) => {
   const [mode, setMode] = useState<'select' | 'auth' | 'form'>('select');
   const [selectedRole, setSelectedRole] = useState<'admin' | 'guest' | null>(null);
-  
+
   const [authData, setAuthData] = useState({ username: '', password: '' });
   const [authError, setAuthError] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const [formData, setFormData] = useState({ 
-    nama: '', 
-    telepon: '', 
-    email: '' 
-  });
+  const [formData, setFormData] = useState({ nama: '', telepon: '', email: '' });
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [scrolledToBottom, setScrolledToBottom] = useState(false);
-  
-  const [gps, setGps] = useState<{ lat: number | null; lon: number | null; acc: number | null; status: 'idle' | 'searching' | 'locked' | 'error' | 'denied'; msg: string; signalStrength: number | null }>({ 
-    lat: null, lon: null, acc: null, status: 'idle', msg: '', signalStrength: null
-  });
-  
+
+  const [gps, setGps] = useState<{
+    lat: number | null;
+    lon: number | null;
+    acc: number | null;
+    status: 'idle' | 'searching' | 'locked' | 'error' | 'denied';
+    msg: string;
+    signalStrength: number | null;
+  }>({ lat: null, lon: null, acc: null, status: 'idle', msg: '', signalStrength: null });
+
   const [faceChecked, setFaceChecked] = useState(false);
   const [facePhoto, setFacePhoto] = useState<string | null>(null);
   const [loginSuccess, setLoginSuccess] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const termsScrollRef = useRef<HTMLDivElement>(null);
-  const googleButtonRef = useRef<HTMLDivElement>(null);
+  const termsScrollRef = useRef<HTMLDivElement | null>(null);
+  const googleButtonRef = useRef<HTMLDivElement | null>(null);
+
+  // Stepper inside form: 1 = Data, 2 = Terms, 3 = GPS, 4 = Camera, 5 = Review/Submit
+  const [step, setStep] = useState<number>(1);
+
+  useEffect(() => {
+    // Reset step when entering form
+    if (mode === 'form') setStep(1);
+  }, [mode]);
 
   const handleGoogleResponse = (response: any) => {
-    const payload = parseJwt(response.credential);
+    const payload = parseJwt(response?.credential);
     if (payload) {
-      setFormData({
-        nama: payload.name || '',
-        email: payload.email || '',
-        telepon: ''
-      });
-      setSelectedRole('guest'); // Internally guest, but visually just a "Login"
+      setFormData((f) => ({ ...f, nama: payload.name || '', email: payload.email || '' }));
+      setSelectedRole('guest');
       setMode('form');
     }
   };
 
   useEffect(() => {
     const google = (window as any).google;
-    if (mode === 'select' && google) {
+    if (mode === 'select' && google && google.accounts && google.accounts.id) {
       google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
-        callback: handleGoogleResponse
+        callback: handleGoogleResponse,
       });
       if (googleButtonRef.current) {
         google.accounts.id.renderButton(googleButtonRef.current, {
-          theme: "outline",
-          size: "large",
-          width: 280,
-          shape: "pill",
-          text: "signin_with"
+          theme: 'outline',
+          size: 'large',
+          width: 320,
+          shape: 'pill',
+          text: 'signin_with',
         });
       }
     }
@@ -95,67 +118,72 @@ export const Login: React.FC<LoginProps> = ({ onVerified, onClose }) => {
   const handleTermsScroll = () => {
     if (termsScrollRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = termsScrollRef.current;
-      if (scrollTop + clientHeight >= scrollHeight - 30) {
+      if (scrollTop + clientHeight >= scrollHeight - 20) {
         setScrolledToBottom(true);
       }
     }
   };
 
-  // Auto-request GPS when form mode is active
   useEffect(() => {
-    if (mode === 'form' && agreedToTerms && gps.status === 'idle') {
-      // Small delay to ensure smooth UI
-      const timer = setTimeout(() => {
-        requestGPS();
-      }, 500);
+    // try auto-request GPS when user agrees and enters GPS step
+    if (mode === 'form' && step === 3 && agreedToTerms && gps.status === 'idle') {
+      const timer = setTimeout(() => requestGPS(), 400);
       return () => clearTimeout(timer);
     }
-  }, [mode, agreedToTerms]);
+  }, [mode, step, agreedToTerms]);
+
+  // calculate signal helper
+  const calculateSignalStrength = (accuracy: number) => {
+    if (accuracy <= 5) return 100;
+    if (accuracy <= 10) return 80;
+    if (accuracy <= 20) return 60;
+    if (accuracy <= 50) return 40;
+    return 20;
+  };
 
   const requestGPS = () => {
-    setGps(prev => ({ ...prev, status: 'searching', msg: '🛰️ MENCARI SINYAL...', signalStrength: 0 }));
-    
-    // Calculate signal strength based on accuracy
-    const calculateSignalStrength = (accuracy: number) => {
-      if (accuracy <= 5) return 100;
-      if (accuracy <= 10) return 80;
-      if (accuracy <= 20) return 60;
-      if (accuracy <= 50) return 40;
-      return 20;
-    };
-    
-    // First try to get cached position for immediate response
+    setGps((prev) => ({ ...prev, status: 'searching', msg: 'MENCARI SINYAL...', signalStrength: 0 }));
+
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setGps({ 
-          lat: pos.coords.latitude, lon: pos.coords.longitude, acc: Math.round(pos.coords.accuracy),
-          status: 'locked', msg: `📍 LOKASI TERKUNCI`,
-          signalStrength: calculateSignalStrength(pos.coords.accuracy)
+        setGps({
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          acc: Math.round(pos.coords.accuracy),
+          status: 'locked',
+          msg: 'LOKASI TERKUNCI',
+          signalStrength: calculateSignalStrength(pos.coords.accuracy),
         });
       },
       (err) => {
-        // If cached fails, start watching for more accurate position
-        setGps(prev => ({ ...prev, status: 'searching', msg: '🛰️ MENGHUBUNGI SATELIT...', signalStrength: 10 }));
+        // try watchPosition as fallback
+        setGps((prev) => ({ ...prev, status: 'searching', msg: 'MENGHUBUNGI SATELIT...', signalStrength: 10 }));
         const watchId = navigator.geolocation.watchPosition(
           (pos) => {
-            setGps({ 
-              lat: pos.coords.latitude, lon: pos.coords.longitude, acc: Math.round(pos.coords.accuracy),
-              status: 'locked', msg: `📍 LOKASI TERKUNCI`,
-              signalStrength: calculateSignalStrength(pos.coords.accuracy)
+            setGps({
+              lat: pos.coords.latitude,
+              lon: pos.coords.longitude,
+              acc: Math.round(pos.coords.accuracy),
+              status: 'locked',
+              msg: 'LOKASI TERKUNCI',
+              signalStrength: calculateSignalStrength(pos.coords.accuracy),
             });
             navigator.geolocation.clearWatch(watchId);
           },
-          (err) => {
-            // Fallback to any available position
+          (err2) => {
+            // final fallback try once more then set error
             navigator.geolocation.getCurrentPosition(
-              (pos) => {
-                setGps({ 
-                  lat: pos.coords.latitude, lon: pos.coords.longitude, acc: Math.round(pos.coords.accuracy),
-                  status: 'locked', msg: `📍 LOKASI TERKUNCI`,
-                  signalStrength: calculateSignalStrength(pos.coords.accuracy)
+              (pos2) => {
+                setGps({
+                  lat: pos2.coords.latitude,
+                  lon: pos2.coords.longitude,
+                  acc: Math.round(pos2.coords.accuracy),
+                  status: 'locked',
+                  msg: 'LOKASI TERKUNCI',
+                  signalStrength: calculateSignalStrength(pos2.coords.accuracy),
                 });
               },
-              () => setGps(prev => ({ ...prev, status: 'error', msg: '⚠️ LOKASI TIDAK TERSEDIA', signalStrength: null })),
+              () => setGps((p) => ({ ...p, status: 'error', msg: 'LOKASI TIDAK TERSEDIA', signalStrength: null })),
               { maximumAge: 60000, timeout: 5000 }
             );
             navigator.geolocation.clearWatch(watchId);
@@ -168,33 +196,36 @@ export const Login: React.FC<LoginProps> = ({ onVerified, onClose }) => {
   };
 
   const requestQuickGPS = () => {
-    // Quick fallback with any available position (lower accuracy but faster)
-    setGps(prev => ({ ...prev, status: 'searching', msg: '⚡ LOKASI CEPAT...', signalStrength: 0 }));
+    setGps((prev) => ({ ...prev, status: 'searching', msg: 'LOKASI CEPAT...', signalStrength: 0 }));
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setGps({ 
-          lat: pos.coords.latitude, lon: pos.coords.longitude, acc: Math.round(pos.coords.accuracy),
-          status: 'locked', msg: `⚡ LOKASI CEPAT (Akurasi: ${Math.round(pos.coords.accuracy)}m)`,
-          signalStrength: Math.round(Math.max(20, 100 - pos.coords.accuracy * 2))
+        setGps({
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          acc: Math.round(pos.coords.accuracy),
+          status: 'locked',
+          msg: 'LOKASI CEPAT (Akurasi: ' + Math.round(pos.coords.accuracy) + 'm)',
+          signalStrength: Math.round(Math.max(20, 100 - pos.coords.accuracy * 2)),
         });
       },
-      () => setGps(prev => ({ ...prev, status: 'error', msg: '❌ GAGAL, COBA LAGI', signalStrength: null })),
+      () => setGps((p) => ({ ...p, status: 'error', msg: 'GAGAL, COBA LAGI', signalStrength: null })),
       { maximumAge: 300000, timeout: 3000 }
     );
   };
 
-  const handleAuthSubmit = (e: React.FormEvent) => {
+  const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSyncing(true);
     const inputUser = authData.username.trim().toLowerCase();
     const inputPass = authData.password.trim();
 
+    // NOTE: replace with a real API call for production
     if (inputUser === 'admin' && inputPass === 'kalimantan selatan') {
       setSelectedRole('admin');
       setMode('form');
     } else {
       setAuthError(true);
-      setTimeout(() => setAuthError(false), 2000);
+      setTimeout(() => setAuthError(false), 2500);
     }
     setIsSyncing(false);
   };
@@ -202,250 +233,332 @@ export const Login: React.FC<LoginProps> = ({ onVerified, onClose }) => {
   const handleFaceChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
         streamRef.current = stream;
         setFaceChecked(true);
-        // Wait for render then attach stream
-        setTimeout(() => {
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-          }
-        }, 100);
-      } catch (err) { 
-        console.error("Camera error:", err);
-        alert("Izin kamera diperlukan. Silakan izinkan akses kamera di browser.");
+        // attach stream
+        if (videoRef.current) videoRef.current.srcObject = stream;
+      } catch (err) {
+        console.error('Camera error:', err);
+        alert('Izin kamera diperlukan. Silakan izinkan akses kamera di browser.');
         setFaceChecked(false);
       }
     } else {
       setFaceChecked(false);
       setFacePhoto(null);
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
     }
   };
 
-  const captureFacePhoto = () => {
+  // Capture function returns photo data synchronously (or null)
+  const captureFacePhotoSync = (): string | null => {
     if (videoRef.current && canvasRef.current) {
-      const canvas = canvasRef.current;
-      const video = videoRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+      const canvas = canvasRef.current as HTMLCanvasElement;
+      const video = videoRef.current as HTMLVideoElement;
+      // make sure video has size
+      const w = video.videoWidth || 640;
+      const h = video.videoHeight || 480;
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const photoData = canvas.toDataURL('image/jpeg', 0.8);
-        setFacePhoto(photoData);
-      }
+      if (!ctx) return null;
+      // mirror back to normal orientation (video is mirrored via scaleX earlier)
+      ctx.save();
+      ctx.scale(-1, 1);
+      ctx.drawImage(video, -w, 0, w, h);
+      ctx.restore();
+      const photoData = canvas.toDataURL('image/jpeg', 0.85);
+      setFacePhoto(photoData);
+      return photoData;
+    }
+    return null;
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
     }
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // GPS dan Face verification wajib diisi
+  useEffect(() => {
+    // cleanup camera stream when unmounting
+    return () => {
+      stopCamera();
+    };
+  }, []);
+
+  // Step navigation validations
+  const canGoNext = (currentStep: number) => {
+    if (currentStep === 1) return formData.nama.trim() !== '' && formData.telepon.trim() !== '';
+    if (currentStep === 2) return scrolledToBottom && agreedToTerms;
+    if (currentStep === 3) return gps.status === 'locked';
+    if (currentStep === 4) return faceChecked; // allow capture on submit if not yet captured
+    return true;
+  };
+
+  const handleNext = () => {
+    if (!canGoNext(step)) return;
+    // auto actions when moving to specific steps
+    if (step === 2) {
+      // user agreed to terms already? nothing
+    }
+    if (step === 3) {
+      // try to lock GPS
+      if (gps.status !== 'locked') requestGPS();
+    }
+    setStep((s) => Math.min(5, s + 1));
+  };
+
+  const handleBack = () => {
+    if (step === 1) {
+      // go back to select
+      setMode('select');
+    } else {
+      setStep((s) => Math.max(1, s - 1));
+    }
+  };
+
+  const finalizeSubmit = async () => {
+    // ensure we have photo
+    let photo = facePhoto;
+    if (!photo) {
+      photo = captureFacePhotoSync();
+    }
+
     if (!agreedToTerms || !faceChecked || gps.status !== 'locked') {
-      alert("Pastikan semua langkah (Terms, GPS, Kamera) sudah hijau.");
+      alert('Pastikan Terms, GPS, dan Kamera sudah selesai.');
       return;
     }
-    
-    // Capture face photo
-    captureFacePhoto();
-    
+
     setIsSyncing(true);
     setLoginSuccess(true);
-    
+
+    // stop camera quickly
+    stopCamera();
+
+    // simulate small delay for UX
     setTimeout(() => {
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-      onVerified({ 
-        name: formData.nama || (selectedRole === 'admin' ? 'Admin Montana' : 'User Terverifikasi'), 
-        photo: "https://ui-avatars.com/api/?name=" + (formData.nama || 'User'),
-        telepon: formData.telepon, email: formData.email,
-        jabatan: selectedRole === 'admin' ? 'Internal Administrator' : 'Portal Member',
-        facePhoto: facePhoto || undefined,
-        gpsLat: gps.lat || undefined,
-        gpsLon: gps.lon || undefined,
-        gpsAcc: gps.acc || undefined
-      }, selectedRole!);
-    }, 1500);
+      setIsSyncing(false);
+      onVerified(
+        {
+          name: formData.nama || (selectedRole === 'admin' ? 'Admin Montana' : 'User Terverifikasi'),
+          photo: 'https://ui-avatars.com/api/?name=' + encodeURIComponent(formData.nama || 'User'),
+          telepon: formData.telepon,
+          email: formData.email,
+          jabatan: selectedRole === 'admin' ? 'Internal Administrator' : 'Portal Member',
+          facePhoto: photo || undefined,
+          gpsLat: gps.lat || undefined,
+          gpsLon: gps.lon || undefined,
+          gpsAcc: gps.acc || undefined,
+        },
+        (selectedRole as 'admin' | 'guest') || 'guest'
+      );
+    }, 700);
   };
 
   return (
-    <div className="fixed inset-0 z-[500] flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md">
-      <div className={`relative w-full max-w-sm bg-white dark:bg-slate-900 rounded-2xl sm:rounded-[48px] p-4 sm:p-8 shadow-2xl border border-white/50 dark:border-slate-800 transition-transform duration-500 will-change-transform ${loginSuccess ? 'scale-95 opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        
-        {mode === 'select' && (
-          <div className="space-y-4 sm:space-y-8 text-center animate-fadeIn">
-            <div className="mb-4">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-100 dark:bg-slate-800 rounded-xl sm:rounded-2xl flex items-center justify-center mx-auto mb-3 sm:mb-4 p-3 sm:p-4">
-                <img src="https://i.ibb.co.com/29Gzw6k/montana-AI.jpg" alt="Montana Logo" className="w-full h-full object-contain" />
-              </div>
-              <h2 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">Montana ID Login</h2>
-              <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest mt-1">Akses Sistem Monitoring</p>
-            </div>
+    <div className="fixed inset-0 z-[500] flex flex-col bg-gradient-to-br from-slate-200 via-slate-400 to-blue-900">
+      <div className={`relative w-full h-full max-w-none bg-[#0F172A]/90 backdrop-blur-xl shadow-2xl border border-white/10 overflow-hidden transition-all duration-300 ${loginSuccess ? 'scale-95 opacity-80' : 'opacity-100'}`}>
+        <div className="bg-gradient-to-r from-blue-700 to-blue-900 p-6 text-center">
+          <div className="w-20 h-20 bg-gradient-to-br from-emerald-400 to-blue-500 rounded-2xl flex items-center justify-center mx-auto mb-4 overflow-hidden shadow-2xl">
+            <span className="text-4xl font-black text-white tracking-tighter">M</span>
+          </div>
+          <h2 className="text-lg font-black text-white uppercase tracking-tight">Montana ID Login</h2>
+          <p className="text-xs font-bold text-emerald-100 uppercase tracking-widest mt-1">Akses Sistem Monitoring</p>
+        </div>
 
-            <div className="space-y-3 sm:space-y-4">
-              <button 
-                onClick={() => setMode('auth')} 
-                className="w-full p-4 sm:p-6 bg-slate-900 dark:bg-emerald-600 text-white rounded-xl sm:rounded-[28px] text-center active:scale-95 transition-all shadow-xl shadow-emerald-500/10 border border-white/10 group min-h-[60px] sm:min-h-[80px]"
+        <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center justify-center">
+          <div className="w-full max-w-md mx-auto">
+          {mode === 'select' && (
+            <div className="space-y-4">
+
+              {/* Full Intro Section */}
+              <div className="w-full p-4 rounded-xl bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700">
+                <h3 className="text-center text-base font-black text-blue-400 uppercase">Montana AI Pro</h3>
+                <p className="text-xs text-slate-300 text-center leading-relaxed mt-2">
+                  Platform cerdas untuk dokumentasi, monitoring, dan validasi
+                  reklamasi lahan berbasis GPS, biometrik, dan AI.
+                  Dirancang untuk memastikan setiap aktivitas lapangan
+                  tercatat secara akurat, transparan, dan berkelanjutan.
+                </p>
+              </div>
+
+              <div className="flex justify-center py-2">
+                <div ref={googleButtonRef} className="google-login-btn"></div>
+              </div>
+
+              <div className="relative py-2">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-200 dark:border-slate-700"></div>
+                </div>
+                <div className="relative flex justify-center">
+                  <span className="bg-white dark:bg-slate-900 px-3 text-xs font-bold text-slate-500 uppercase tracking-widest">atau</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setMode('auth')}
+                className="w-full p-4 bg-gradient-to-r from-slate-900 to-slate-800 dark:from-emerald-600 dark:to-emerald-500 text-white rounded-xl text-center transition-all shadow-lg"
               >
                 <div className="flex flex-col items-center">
-                  <i className="fas fa-user-shield text-xl sm:text-2xl mb-1 sm:mb-2 text-emerald-400 group-hover:scale-110 transition-transform"></i>
-                  <h4 className="font-black text-sm sm:text-base uppercase">Administrator Login</h4>
-                  <p className="text-[7px] sm:text-[8px] opacity-60 uppercase font-bold tracking-widest mt-0.5 sm:mt-1">Internal Control Access</p>
+                  <i className="fas fa-user-shield text-xl mb-1 text-emerald-400"></i>
+                  <h4 className="font-black text-base uppercase">Administrator Login</h4>
                 </div>
               </button>
 
-              <div className="relative py-2">
-                <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100 dark:border-slate-800"></div></div>
-                <div className="relative flex justify-center text-[7px] sm:text-[8px] font-black uppercase tracking-widest"><span className="bg-white dark:bg-slate-900 px-3 sm:px-4 text-slate-500 dark:text-slate-400">Verifikasi Google</span></div>
+              <button onClick={onClose} className="w-full py-3 text-sm font-bold text-slate-500 hover:text-emerald-500 uppercase tracking-wider transition-colors">
+                Lanjutkan Sebagai Tamu
+              </button>
+            </div>
+          )}
+
+                    {mode === 'auth' && (
+            <form onSubmit={handleAuthSubmit} className="space-y-4">
+              <div className="text-center">
+                <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase">Autentikasi Admin</h2>
               </div>
 
-              <div className="flex justify-center" ref={googleButtonRef}></div>
-            </div>
+              <div className="space-y-3">
+                <input type="text" placeholder="ID PENGGUNA" required value={authData.username} onChange={(e) => setAuthData({ ...authData, username: e.target.value })} className="w-full p-3 bg-slate-50 dark:bg-slate-800 rounded-xl outline-none border-2 border-slate-200" />
+                <input type="password" placeholder="KATA SANDI" required value={authData.password} onChange={(e) => setAuthData({ ...authData, password: e.target.value })} className="w-full p-3 bg-slate-50 dark:bg-slate-800 rounded-xl outline-none border-2 border-slate-200" />
+              </div>
 
-            <button onClick={onClose} className="w-full py-2 text-[8px] sm:text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest hover:text-emerald-500 min-h-[44px]">Lanjutkan Sebagai Tamu</button>
-          </div>
-        )}
+              {authError && <p className="text-sm text-rose-500 font-bold uppercase text-center">ID atau Sandi tidak sesuai.</p>}
 
-        {mode === 'auth' && (
-          <form onSubmit={handleAuthSubmit} className="space-y-4 sm:space-y-6 animate-fadeIn">
-             <div className="text-center">
-                <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white uppercase">Autentikasi Admin</h2>
-                <p className="text-[8px] sm:text-[9px] font-bold text-emerald-500 uppercase tracking-widest mt-1.5 sm:mt-2 animate-pulse">Security Protocol Alpha</p>
-             </div>
-             
-             <div className="space-y-2.5 sm:space-y-3">
-                <input 
-                  type="text" placeholder="ID PENGGUNA" required value={authData.username} onChange={e => setAuthData({...authData, username: e.target.value})} 
-                  className="w-full p-3.5 sm:p-5 bg-slate-50 dark:bg-slate-800 rounded-xl sm:rounded-2xl text-[10px] sm:text-[11px] font-black uppercase tracking-widest outline-none dark:text-white border border-slate-100 dark:border-slate-700 focus:border-emerald-500 min-h-[52px]" 
-                />
-                <input 
-                  type="password" placeholder="KATA SANDI" required value={authData.password} onChange={e => setAuthData({...authData, password: e.target.value})} 
-                  className="w-full p-3.5 sm:p-5 bg-slate-50 dark:bg-slate-800 rounded-xl sm:rounded-2xl text-[10px] sm:text-[11px] font-black uppercase tracking-widest outline-none dark:text-white border border-slate-100 dark:border-slate-700 focus:border-emerald-500 min-h-[52px]" 
-                />
-             </div>
+              <div className="space-y-2">
+                <button type="submit" className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full font-bold transition">KONFIRMASI</button>
+                <button type="button" onClick={() => setMode('select')} className="w-full py-2 text-slate-500">Kembali</button>
+              </div>
+                    {/* Tombol Masuk sebagai Tamu */}
+        <a
+          href="https://montana-tech.info/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block w-full mt-4 text-center py-2 rounded-xl bg-slate-800/80 text-slate-200 hover:bg-slate-700 transition"
+        >
+          Masuk sebagai Tamu
+        </a>
 
-             {authError && <p className="text-[8px] sm:text-[9px] text-rose-500 font-bold uppercase text-center animate-shake">ID atau Sandi tidak sesuai.</p>}
+      </form>
+          )}
 
-             <button type="submit" className="w-full py-3.5 sm:py-5 bg-slate-950 dark:bg-emerald-600 text-white rounded-xl sm:rounded-2xl font-black text-[10px] sm:text-[11px] uppercase tracking-widest active:scale-95 transition-all shadow-xl min-h-[52px]">
-               KONFIRMASI IDENTITAS
-             </button>
-             <button type="button" onClick={() => setMode('select')} className="w-full py-2 text-slate-500 dark:text-slate-400 font-bold text-[8px] sm:text-[9px] uppercase tracking-widest text-center min-h-[44px]">Kembali</button>
-          </form>
-        )}
+                    {mode === 'form' && (
+            <div className="space-y-4">
+              {/* Step header */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-black text-slate-900 dark:text-white uppercase">Validasi Profil</h3>
+                  <p className="text-xs text-slate-500">Langkah {step} dari 5</p>
+                </div>
+                <div className="text-xs text-slate-400">{selectedRole?.toUpperCase() || 'GUEST'}</div>
+              </div>
 
-        {mode === 'form' && (
-          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6 max-h-[75vh] overflow-y-auto no-scrollbar animate-fadeIn">
-            <div className="text-center">
-                <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white uppercase">Validasi Profil</h2>
-                <p className="text-[8px] sm:text-[9px] font-bold text-emerald-500 uppercase tracking-widest mt-1">Langkah Terakhir Verifikasi</p>
-            </div>
+              {/* Step content */}
+              {step === 1 && (
+                <div className="space-y-3">
+                  <input type="text" placeholder="NAMA LENGKAP" required value={formData.nama} onChange={(e) => setFormData({ ...formData, nama: e.target.value })} className="w-full p-3 bg-slate-800 text-slate-100 rounded-xl" />
+                  <input type="tel" placeholder="NO. WHATSAPP" required value={formData.telepon} onChange={(e) => setFormData({ ...formData, telepon: e.target.value })} className="w-full p-3 bg-slate-800 text-slate-100 rounded-xl" />
+                </div>
+              )}
 
-            <div className="space-y-2.5 sm:space-y-3">
-                <input type="text" placeholder="NAMA LENGKAP" required value={formData.nama} onChange={e => setFormData({ ...formData, nama: e.target.value })} className="w-full p-3.5 sm:p-5 bg-slate-50 dark:bg-slate-800 rounded-xl sm:rounded-2xl text-[10px] sm:text-[11px] font-black uppercase outline-none dark:text-white border border-slate-100 dark:border-slate-700 min-h-[52px]" />
-                <input type="tel" placeholder="NO. WHATSAPP" required value={formData.telepon} onChange={e => setFormData({ ...formData, telepon: e.target.value })} className="w-full p-3.5 sm:p-5 bg-slate-50 dark:bg-slate-800 rounded-xl sm:rounded-2xl text-[10px] sm:text-[11px] font-black uppercase outline-none dark:text-white border border-slate-100 dark:border-slate-700 min-h-[52px]" />
-            </div>
+              {step === 2 && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-bold uppercase text-center">1. Pakta Integritas Data</h4>
+                  <div ref={termsScrollRef} onScroll={handleTermsScroll} className="h-36 overflow-y-auto px-3 py-2 bg-slate-800 rounded-lg text-sm leading-relaxed">
+                    <TermsContent />
+                  </div>
+                  <label className={`flex items-center gap-3 cursor-pointer p-3 bg-slate-800 rounded-lg border-2 ${!scrolledToBottom ? 'opacity-50' : ''}`}>
+                    <input type="checkbox" disabled={!scrolledToBottom} checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} className="w-5 h-5 rounded" />
+                    <span className="text-sm font-bold uppercase">{scrolledToBottom ? 'SAYA SETUJU' : 'SCROLL KE BAWAH DAHULU'}</span>
+                  </label>
+                </div>
+              )}
 
-            <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl sm:rounded-3xl p-3 sm:p-5 space-y-3">
-               <h4 className="text-[8px] sm:text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest text-center">1. Pakta Integritas Data</h4>
-               <div ref={termsScrollRef} onScroll={handleTermsScroll} className="h-20 sm:h-24 overflow-y-auto px-3 sm:px-4 bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] no-scrollbar">
-                  <TermsContent />
-               </div>
-               <label className={`flex items-center gap-2.5 sm:gap-3 cursor-pointer p-2.5 sm:p-3 bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl border transition-opacity min-h-[44px] ${!scrolledToBottom ? 'opacity-30' : 'opacity-100'}`}>
-                  <input type="checkbox" disabled={!scrolledToBottom} checked={agreedToTerms} onChange={(e) => setAgreedToTerms(e.target.checked)} className="w-5 h-5 rounded text-emerald-600 flex-shrink-0" />
-                  <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest">{scrolledToBottom ? 'SAYA SETUJU' : 'SCROLL KE BAWAH'}</span>
-               </label>
-            </div>
-
-            <div className={!agreedToTerms ? 'opacity-30 pointer-events-none' : ''}>
-               <div className="bg-slate-900 dark:bg-slate-800 rounded-xl sm:rounded-3xl p-3 sm:p-5">
-                  <h4 className="text-[8px] sm:text-[9px] font-black text-emerald-400 uppercase tracking-widest text-center mb-3 sm:mb-4">2. Geofencing System</h4>
-                  
-                  {/* GPS Status Bar */}
+              {step === 3 && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-bold uppercase text-center">2. Geofencing System</h4>
                   {gps.status === 'searching' && (
-                    <div className="mb-2.5 sm:mb-3">
-                      <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                    <div>
+                      <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
                         <div className="h-full bg-emerald-500 animate-pulse" style={{ width: '60%' }}></div>
                       </div>
-                      <p className="text-[7px] sm:text-[8px] text-center text-emerald-400 mt-1 animate-pulse">{gps.msg}</p>
+                      <p className="text-sm text-center mt-2">{gps.msg}</p>
                     </div>
                   )}
-                  
-                  <button type="button" onClick={requestGPS} className={`w-full py-3.5 sm:py-4 rounded-xl sm:rounded-2xl flex flex-col items-center justify-center gap-1 ${gps.status === 'locked' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-emerald-600 text-white shadow-xl shadow-emerald-500/20'} min-h-[60px]`}>
-                    <i className={`fas ${gps.status === 'locked' ? 'fa-check-circle' : 'fa-location-crosshairs'} text-base sm:text-lg`}></i>
-                    <span className="text-[9px] sm:text-[10px] font-black uppercase">
-                      {gps.status === 'locked' ? 'GPS TERKUNCI' : 'KUNCI LOKASI'}
-                    </span>
-                    {gps.status === 'locked' && gps.lat && gps.lon && (
-                      <span className="text-[7px] sm:text-[8px] font-mono opacity-75">
-                        {gps.lat.toFixed(6)}, {gps.lon.toFixed(6)}
-                      </span>
-                    )}
-                    {gps.status === 'locked' && gps.acc && (
-                      <span className="text-[6px] sm:text-[7px] font-bold opacity-60">
-                        Akurasi: ±{gps.acc}m
-                      </span>
-                    )}
-                  </button>
-                  
-                  {/* Quick option if GPS takes too long */}
-                  {gps.status === 'searching' && (
-                    <button type="button" onClick={requestQuickGPS} className="w-full mt-2 py-2 bg-slate-700/50 text-slate-400 rounded-lg sm:rounded-xl text-[7px] sm:text-[8px] font-bold uppercase tracking-wider hover:bg-slate-700 hover:text-white transition-colors min-h-[44px]">
-                      ⚡ Gunakan Lokasi Terakhir (Lebih Cepat)
-                    </button>
-                  )}
-                  
-                  {/* Error with retry */}
-                  {gps.status === 'error' && (
-                    <div className="mt-2.5 sm:mt-3 p-2.5 sm:p-3 bg-rose-500/20 rounded-lg sm:rounded-xl text-center">
-                      <p className="text-[7px] sm:text-[8px] text-rose-400 font-bold uppercase mb-1.5 sm:mb-2">{gps.msg}</p>
-                      <button type="button" onClick={requestGPS} className="px-3.5 sm:px-4 py-2 bg-rose-600 text-white rounded-lg text-[7px] sm:text-[8px] font-bold uppercase min-h-[44px]">
-                        COBA LAGI
-                      </button>
-                    </div>
-                  )}
-                  
-                  {/* Signal indicator when locked */}
-                  {gps.status === 'locked' && gps.signalStrength && (
-                    <div className="mt-2.5 sm:mt-3 flex items-center justify-center gap-1.5 sm:gap-2">
-                      <span className="text-[6px] sm:text-[7px] text-slate-500 uppercase">Sinyal:</span>
-                      <div className="flex gap-0.5">
-                        {[1,2,3,4,5].map((i) => (
-                          <div key={i} className={`w-1.5 h-2.5 sm:h-3 rounded-sm ${i <= Math.ceil(gps.signalStrength / 20) ? 'bg-emerald-500' : 'bg-slate-700'}`}></div>
-                        ))}
-                      </div>
-                      <span className="text-[6px] sm:text-[7px] text-emerald-500 font-bold">{gps.signalStrength}%</span>
-                    </div>
-                  )}
-               </div>
-            </div>
 
-            <div className={gps.status !== 'locked' ? 'opacity-30 pointer-events-none' : ''}>
-              <div className="bg-slate-50 dark:bg-slate-800/40 rounded-xl sm:rounded-3xl p-3 sm:p-5">
-                <h4 className="text-[8px] sm:text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest text-center mb-3 sm:mb-4">3. Biometrik Wajah</h4>
-                <label className="flex items-center gap-2.5 sm:gap-3 cursor-pointer mb-3 sm:mb-4 p-2.5 sm:p-3 bg-white dark:bg-slate-900 rounded-lg sm:rounded-xl border min-h-[44px]">
-                   <input type="checkbox" checked={faceChecked} onChange={handleFaceChange} className="w-5 h-5 rounded text-emerald-600 flex-shrink-0" />
-                   <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-widest">AKTIFKAN SCANNER</span>
-                </label>
-                {faceChecked && (
-                  <div className="relative rounded-xl sm:rounded-2xl overflow-hidden aspect-video bg-black shadow-inner ring-2 sm:ring-4 ring-emerald-500/20">
-                    <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover scale-x-[-1]" />
-                    <canvas ref={canvasRef} className="hidden" />
-                    <div className="absolute inset-0 border-2 border-emerald-500/30 animate-pulse"></div>
-                    {facePhoto && (
-                      <div className="absolute top-1.5 sm:top-2 right-1.5 sm:right-2 bg-emerald-500 text-white text-[7px] sm:text-[8px] font-bold px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-full">
-                        <i className="fas fa-check-circle mr-1"></i> TERVERIFIKASI
+                  <button type="button" onClick={requestGPS} className={`w-full py-3 rounded-xl ${gps.status === 'locked' ? 'bg-emerald-100 text-blue-400' : 'bg-blue-600 text-white'}`}>
+                    {gps.status === 'locked' ? 'GPS TERKUNCI' : 'KUNCI LOKASI SEKARANG'}
+                  </button>
+
+                  {gps.status === 'locked' && gps.lat && gps.lon && (
+                    <div className="text-xs font-mono text-center">
+                      {gps.lat.toFixed(6)}, {gps.lon.toFixed(6)} • Akurasi: ±{gps.acc}m
+                    </div>
+                  )}
+
+                  {gps.status !== 'locked' && (
+                    <button type="button" onClick={requestQuickGPS} className="w-full py-2 text-sm">⚡ Gunakan Lokasi Terakhir (Cepat)</button>
+                  )}
+                </div>
+              )}
+
+              {step === 4 && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-bold uppercase text-center">3. Biometrik Wajah</h4>
+                  <label className="flex items-center gap-3 cursor-pointer p-3 bg-slate-800 rounded-lg border-2">
+                    <input type="checkbox" checked={faceChecked} onChange={handleFaceChange} className="w-5 h-5 rounded" />
+                    <span className="text-sm font-bold uppercase">AKTIFKAN SCANNER</span>
+                  </label>
+
+                  {faceChecked && (
+                    <div className="relative rounded-xl overflow-hidden aspect-video bg-black shadow-inner">
+                      <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover transform scale-x-[-1]" />
+                      <canvas ref={canvasRef} className="hidden" />
+                      <div className="absolute inset-0 border-4 border-blue-500/30"></div>
+                      {facePhoto && (
+                        <div className="absolute top-2 right-2 bg-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-full">TERVERIFIKASI</div>
+                      )}
+                      <div className="p-2 flex gap-2">
+                        <button type="button" onClick={() => captureFacePhotoSync()} className="mt-2 py-2 px-3 bg-blue-600 text-white rounded">Ambil Foto</button>
+                        <button type="button" onClick={() => { setFacePhoto(null); }} className="mt-2 py-2 px-3 bg-slate-200 rounded">Ulangi</button>
                       </div>
-                    )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {step === 5 && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-bold uppercase text-center">Review & Submit</h4>
+                  <div className="bg-slate-800 text-slate-200 rounded-lg p-3 text-sm">
+                    <p><strong>Nama:</strong> {formData.nama}</p>
+                    <p><strong>WA:</strong> {formData.telepon}</p>
+                    <p><strong>Email:</strong> {formData.email || '-'}</p>
+                    <p><strong>GPS:</strong> {gps.lat ? `${gps.lat.toFixed(4)}, ${gps.lon?.toFixed(4)} (±${gps.acc}m)` : 'Belum'}</p>
+                    <p><strong>Foto Wajah:</strong> {facePhoto ? 'Tersedia' : 'Belum'}</p>
                   </div>
+                </div>
+              )}
+
+              {/* Step controls */}
+              <div className="flex gap-2">
+                <button type="button" onClick={handleBack} className="flex-1 py-3 border border-slate-400/40 text-slate-200 rounded-full hover:bg-white/5 transition">{step === 1 ? 'Batal' : 'Kembali'}</button>
+                {step < 5 ? (
+                  <button type="button" onClick={handleNext} disabled={!canGoNext(step)} className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition">Berikutnya</button>
+                ) : (
+                  <button type="button" onClick={finalizeSubmit} disabled={!agreedToTerms || !faceChecked || gps.status !== 'locked'} className="flex-1 py-3 bg-blue-600 text-white rounded">
+                    {isSyncing ? 'MEMPROSES...' : 'SELESAIKAN VERIFIKASI'}
+                  </button>
                 )}
               </div>
-            </div>
 
-            <button type="submit" disabled={!faceChecked || isSyncing || gps.status !== 'locked'} className="w-full py-3.5 sm:py-5 bg-emerald-600 disabled:bg-slate-200 text-white rounded-xl sm:rounded-[28px] font-black text-[10px] sm:text-[12px] uppercase tracking-widest shadow-xl shadow-emerald-500/30 active:scale-95 transition-all min-h-[52px]">
-              SELESAIKAN VERIFIKASI
-            </button>
-            <button type="button" onClick={() => setMode('select')} className="w-full py-2 text-slate-500 dark:text-slate-400 font-bold text-[8px] sm:text-[9px] uppercase tracking-widest text-center min-h-[44px]">Batal</button>
-          </form>
-        )}
+              <div className="text-center text-xs text-slate-400 mt-2"><em>Tip: setiap langkah dibuat agar muat di layar — tidak perlu scroll panjang.</em></div>
+            </div>
+          )}
+        </div>
+        </div>
       </div>
     </div>
   );
