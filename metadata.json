@@ -1,0 +1,8 @@
+{
+  "name": "Montana AI Pro",
+  "description": "Smart Land Reclamation Management System",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
