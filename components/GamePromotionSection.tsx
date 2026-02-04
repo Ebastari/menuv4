@@ -31,7 +31,7 @@ export const GamePromotionSection: React.FC = () => {
   ];
 
   const handlePlayGame = () => {
-    window.open('https://ebastari.github.io/pokemonkey-game/', '_blank', 'noopener,noreferrer');
+    window.open('https://pokemonkey1.vercel.app/', '_blank', 'noopener,noreferrer');
   };
 
   return (

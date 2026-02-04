@@ -30,14 +30,14 @@ export const GrowthCard: React.FC<GrowthCardProps> = ({ currentSeconds }) => {
   }, [currentSeconds]);
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-[52px] p-10 shadow-2xl shadow-slate-200/40 dark:shadow-none border border-slate-100 dark:border-white/5 transition-all group relative overflow-hidden">
+    <div className="bg-white dark:bg-slate-900 rounded-[52px] p-10 shadow-2xl shadow-slate-200/40 dark:shadow-none border border-slate-100 dark:border-white/5 transition-transform duration-300 group relative overflow-hidden">
       {/* Dynamic Glow Decor */}
-      <div className="absolute -right-16 -top-16 w-64 h-64 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-[80px] group-hover:opacity-100 group-hover:scale-125 transition-all duration-1000"></div>
+      <div className="absolute -right-16 -top-16 w-64 h-64 bg-emerald-500/10 dark:bg-emerald-500/5 rounded-full blur-[80px] group-hover:opacity-100 group-hover:scale-125 transition-opacity duration-1000 will-change-transform"></div>
       
       <div className="relative z-10">
         <div className="flex justify-between items-start mb-12">
           <div className="flex items-center gap-6">
-            <div className="w-20 h-20 bg-emerald-600 rounded-[30px] flex items-center justify-center text-white text-4xl shadow-2xl shadow-emerald-500/30 group-hover:rotate-12 transition-all duration-700 ring-4 ring-emerald-500/10">
+            <div className="w-20 h-20 bg-emerald-600 rounded-[30px] flex items-center justify-center text-white text-4xl shadow-2xl shadow-emerald-500/30 group-hover:rotate-12 transition-transform duration-700 ring-4 ring-emerald-500/10">
               <i className="fas fa-seedling"></i>
             </div>
             <div>
@@ -71,13 +71,13 @@ export const GrowthCard: React.FC<GrowthCardProps> = ({ currentSeconds }) => {
 
           <div className="flex justify-between text-[10px] font-black uppercase tracking-widest px-2">
             {[GrowthLevel.SEMAI, GrowthLevel.PANCANG, GrowthLevel.TIANG, GrowthLevel.POHON, GrowthLevel.RIMBA].map(level => (
-               <span key={level} className={`transition-all duration-700 ${growthData.currentLevel === level ? 'text-emerald-600 dark:text-emerald-400 scale-110 drop-shadow-sm' : 'text-slate-300 dark:text-slate-600'}`}>
+               <span key={level} className={`transition-transform duration-700 ${growthData.currentLevel === level ? 'text-emerald-600 dark:text-emerald-400 scale-110 drop-shadow-sm' : 'text-slate-300 dark:text-slate-600'}`}>
                  {level}
                </span>
             ))}
           </div>
 
-          <div className="bg-slate-50/80 dark:bg-white/5 rounded-[40px] p-8 flex justify-between items-center group-hover:bg-emerald-50/60 dark:group-hover:bg-white/[0.07] transition-all duration-500 border border-black/5 dark:border-white/5">
+          <div className="bg-slate-50/80 dark:bg-white/5 rounded-[40px] p-8 flex justify-between items-center group-hover:bg-emerald-50/60 dark:group-hover:bg-white/[0.07] transition-colors duration-500 border border-black/5 dark:border-white/5">
             <div>
               <p className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.3em] mb-2 leading-none">Global Progress</p>
               <div className="flex items-baseline gap-2">

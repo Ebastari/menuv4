@@ -38,7 +38,7 @@ export const WeatherOverlay: React.FC<WeatherOverlayProps> = React.memo(({ condi
   };
 
   return (
-    <div className={`fixed inset-0 pointer-events-none z-0 overflow-hidden transition-all duration-[2000ms] bg-gradient-to-br ${getGradientClass()}`}>
+    <div className={`fixed inset-0 pointer-events-none z-0 overflow-hidden transition-opacity duration-[2000ms] ease-in-out bg-gradient-to-br ${getGradientClass()}`}>
       
       {/* 1. CERAH / CLEAR */}
       {condition === 'clear' && (
